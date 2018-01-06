@@ -2,7 +2,7 @@ import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Set;
 
-public class TxHandler {
+public class MaxFeeTxHandler {
 
 		private UTXOPool utxoPool;
     /**
@@ -10,7 +10,7 @@ public class TxHandler {
      * {@code utxoPool}. This should make a copy of utxoPool by using the UTXOPool(UTXOPool uPool)
      * constructor.
      */
-    public TxHandler(UTXOPool utxoPool) {
+    public MaxFeeTxHandler(UTXOPool utxoPool) {
 			this.utxoPool = new UTXOPool(utxoPool);
     }
 
@@ -28,11 +28,11 @@ public class TxHandler {
 			double currentTxTotalInput = 0;
 			double currentTxTotalOutput = 0;
 			for (int i = 0; i < tx.numInputs(); i++) {
-					Transaction.Input in = tx.getInput(i);
-					UTXO utxo = new UTXO(in.prevTxHash, in.outputIndex);
+					Transaction.Input input = tx.getInput(i);
+					UTXO utxo = new UTXO(input.prevTxHash, input.outputIndex);
 					Transaction.Output output = utxoPool.getTxOutput(utxo);
 					if (!utxoPool.contains(utxo)) return false;
-					if (!Crypto.verifySignature(output.address, tx.getRawDataToSign(i), in.signature))
+					if (!Crypto.verifySignature(output.address, tx.getRawDataToSign(i), input.signature))
 							return false;
 					if (uniqueUtxos.contains(utxo)) return false;
 					uniqueUtxos.addUTXO(utxo, output);
@@ -52,13 +52,17 @@ public class TxHandler {
      */
     public Transaction[] handleTxs(Transaction[] possibleTxs) {
         // IMPLEMENT THIS
+      Transaction[] sortedPossibleTxs = Arrays.copyOf(possibleTxs, possibleTxs.length); 
+      Arrays.sort(sortedPossibleTxs, (Transaction tx1, Transaction tx2) -> {
+        return Double.valueOf(calculateTxFee(tx2)).compareTo(calculateTxFee(tx1));
+      });
       Set<Transaction> validTxs = new HashSet<>();
 
-			for (Transaction tx : possibleTxs) {
+			for (Transaction tx : sortedPossibleTxs) {
 					if (isValidTx(tx)) {
 							validTxs.add(tx);
-							for (Transaction.Input in : tx.getInputs()) {
-									UTXO utxo = new UTXO(in.prevTxHash, in.outputIndex);
+							for (Transaction.Input input : tx.getInputs()) {
+									UTXO utxo = new UTXO(input.prevTxHash, input.outputIndex);
 									utxoPool.removeUTXO(utxo);
 							}
 							for (int i = 0; i < tx.numOutputs(); i++) {
@@ -71,6 +75,22 @@ public class TxHandler {
 
 			Transaction[] validTxArray = new Transaction[validTxs.size()];
 			return validTxs.toArray(validTxArray);
+    }
+
+    private double calculateTxFee(Transaction tx) {
+      double totalInput = 0;
+      double totalOutput = 0;
+      for (Transaction.Input input : tx.getInputs()) {
+        UTXO utxo = new UTXO(input.prevTxHash, input.outputIndex);
+        Transaction.Output txOutput = utxoPool.getTxOutput(utxo);
+        if (txOutput != null) {
+          totalInput += txOutput.value;
+        }
+      }
+      for (Transaction.Output out : tx.getOutputs()) {
+        totalOutput += out.value;
+      }
+      return totalInput - totalOutput;
     }
 
 }
