@@ -21,12 +21,17 @@ public class BlockChain {
         return block.getHash();
       }
 
+      public UTXOPool getUTXOPoolCopy() {
+        return new UTXOPool(utxoPool);
+      }
+
       public BlockNode(Block block, BlockNode parent, UTXOPool utxoPool) {
         this.block = block;
         this.utxoPool = utxoPool;
         if (parent != null) {
           height = parent.height + 1;
         } else {
+          height = 1;
         } 
       }
     }
@@ -50,7 +55,7 @@ public class BlockChain {
 
     /** Get the UTXOPool for mining a new block on top of max height block */
     public UTXOPool getMaxHeightUTXOPool() {
-      return highestNode.utxoPool;
+      return highestNode.getUTXOPoolCopy();
     }
 
     /** Get the transaction pool to mine a new block */
@@ -79,19 +84,20 @@ public class BlockChain {
       if (parentBlockNode == null) {
         return false;
       }
-      TxHandler txHandler = new TxHandler(utxoPool);
+      TxHandler txHandler = new TxHandler(parentBlockNode.getUTXOPoolCopy());
       ArrayList<Transaction> allTxArrayList = block.getTransactions();
       Transaction[] allTxs = allTxArrayList.toArray(new Transaction[allTxArrayList.size()]);
       Transaction[] validTxs = txHandler.handleTxs(allTxs);
-      int newBlockNodeHeight = parentBlockNode.height;
       if (validTxs.length != allTxs.length) {
         return false;
       }
-      if (newBlockNodeHeight < highestNode.height - CUT_OFF_AGE) {
+      int newBlockNodeHeight = parentBlockNode.height;
+      if (newBlockNodeHeight <= highestNode.height - CUT_OFF_AGE) {
         return false;
       }
-      addCoinbaseTXToUTXOPool(block, txHandler.getUTXOPool());
-      BlockNode newBlockNode = new BlockNode(block, parentBlockNode, utxoPool);
+      UTXOPool newBlockNodeUTXOPool = txHandler.getUTXOPool();
+      addCoinbaseTXToUTXOPool(block, newBlockNodeUTXOPool);
+      BlockNode newBlockNode = new BlockNode(block, parentBlockNode, newBlockNodeUTXOPool);
       nodes.put(newBlockNode.getHash(), newBlockNode);
       if (newBlockNodeHeight > highestNode.height) {
         highestNode = newBlockNode;
